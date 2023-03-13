@@ -1,0 +1,30 @@
+header,main {
+	margin: 1em 0;
+}
+
+h1,h2 {
+	font-family: 'PT Serif';
+}
+h1 {font-weight: 600;
+font-size: 3.5em;
+}
+body {
+	background-color: #272222;
+	color: #f5f1f0;
+}
+#intro {
+	font-family: 'Rubik';
+	font-size: 1em;
+}
+.underline {
+	text-decoration: underline;
+	text-decoration-color: #e0510e;
+	text-decoration-thickness: 3px;
+}
+.link {
+	text-decoration: none;
+	color: #f5f1f0;
+}
+
+/** Question: I would like be links to be the normal body color and become underlined when hovering over, how can I do this?**/
+
