@@ -7,6 +7,12 @@ header,main {
 	margin: 1em 0;
 }
 
+.nav-link {
+	font-size: 1em;
+	display: inline;
+	padding: 0 1em 0 0;
+}
+
 main {
 	font-family: 'Rubik';
 	font-size: 1.1em;
@@ -25,9 +31,7 @@ font-size: 3.5em;
 }
 
 .underline {
-	text-decoration: underline;
-	text-decoration-color: #e0510e;
-	text-decoration-thickness: 3px;
+	text-decoration: 3px underline #e0510e;
 }
 
 .link {
