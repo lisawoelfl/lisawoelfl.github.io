@@ -6,7 +6,7 @@ body {
 }
 
 header {
-	padding: 10em 1em 10em 1em; 
+	padding: 10em 1em 10em 1em;
 	background-color: #0E171A;
 	color: #fafafa;
 }
@@ -27,13 +27,17 @@ main {
 	padding-top: 5em;
 }
 
-h1, h2, h3, h4 {
+h1,
+h2,
+h3,
+h4 {
 	font-family: 'Cabin Condensed', sans-serif;
 	font-weight: 700;
 
 }
 
-h2, h4 {
+h2,
+h4 {
 	padding-top: 2em;
 }
 
@@ -61,6 +65,7 @@ a {
 	text-decoration: 1px underline #b2322d;
 	color: #0E171A;
 }
+
 a:hover {
 	color: #b2322d;
 }
@@ -77,11 +82,11 @@ iframe {
 }
 
 .timeline b {
-letter-spacing: 1px;
-background-color: #b2322d;
-color: #fafafa;
-font-weight: 500;
-padding: 0 0.3em 0 0.3em;
+	letter-spacing: 1px;
+	background-color: #b2322d;
+	color: #fafafa;
+	font-weight: 500;
+	padding: 0 0.3em 0 0.3em;
 }
 
 .timeline a {
@@ -97,10 +102,10 @@ footer {
 
 @media (max-width:768px) {
 	header {
-text-align: center;
-padding: 15em 1em 15em 1em; 
-	  }
+		text-align: center;
+		padding: 15em 1em 15em 1em;
 	}
+}
 
 @media (max-width: 480px) {
 	h4 {
