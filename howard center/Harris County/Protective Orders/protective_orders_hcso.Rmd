@@ -1,0 +1,328 @@
+---
+title: "protective_orders_hcso"
+output: html_notebook
+---
+
+## Introduction 
+
+In this notebook, I'm examining data on protective orders in Harris County, Texas. I've received an Excel file with both criminal and civil protective orders. The difference is that criminal protective orders are issued after an arrest is made. Civil protective orders are issued only when the victim requests it.
+
+About the civil data: Every case has two rows, one for defendant, one for plaintiff. They share the case number.
+
+I'm specifically examining the data on protective orders around Hurricane Harvey (Aug. 17 -  Sept. 3 2017) and Winter Storm Uri (Feb. 13 - 17 2021).
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+``` 
+
+## Load libraries
+
+Loading required libraries for this analysis.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(openxlsx)
+library(forecast)
+library(ggplot2)
+library(zoo)
+```
+
+## Read in reports
+
+```{r}
+## criminal protective orders
+
+criminal_po <- "data_woelfl.xlsx" %>%
+  read_excel(sheet = 1) %>% clean_names() %>% 
+  mutate(code_desc = case_when(
+    order_code == "79" ~ "epo denied",
+    order_code == "78" ~ "epo granted",
+    order_code == "PE" ~ "po def denied",
+    order_code == "PD" ~ "po def granted",
+    order_code == "PT" ~ "po stay denied",
+    order_code == "PS" ~ "po stay granted",
+    TRUE ~ "unknown"
+  ))
+
+## civil protective orders
+
+civil_po <- "data_woelfl.xlsx" %>% 
+  read_excel(sheet = 3) %>% clean_names()%>% 
+  mutate(case_nbr = replace(case_nbr, 1, 201700076))
+```
+
+## Analysis
+
+```{r}
+## criminal data: what defendants show up multiple times?
+
+def_crim <- criminal_po %>%
+  count(def_name) %>% 
+  filter(n >= 10) %>% 
+  arrange(desc(n))
+
+criminal_po %>% 
+  summarise(cases = n_distinct(case_num))
+```
+
+Findings: There are 68,498 defendants. Three people show up in the criminal dataset 24 times. 78 people show up at least 78 times. Henny Joseph Baham and Ulf Gerrit Lueders (both 24x) are sex offenders, their victims are children.
+
+There are 80,429 distinct cases and 96,164 cases overall.
+
+```{r}
+## criminal: how did # change before, during, after disasters?
+
+time_crim <- criminal_po %>% 
+  mutate(file_date = ifelse(nchar(file_date) == 5, str_pad(file_date, width = 6, side = "left", pad = "0"), file_date)) %>% 
+  mutate(setting_date = ifelse(nchar(setting_date) == 5, str_pad(file_date, width = 6, side = "left", pad = "0"), file_date)) %>% 
+  mutate(file_date = as.Date(file_date, format = "%m%d%y")) %>% 
+  mutate(setting_date = as.Date(setting_date, format = "%m%d%y")) %>% 
+  mutate(order_date = as.Date(order_date, format = "%Y-%m-%d"))
+
+## criminal protective orders per day
+  
+day_crim <- time_crim %>% 
+  mutate(file_date = floor_date(file_date, "day")) %>% 
+  filter(grepl('2017|2018|2019|2020|2021|2022',file_date)) %>% 
+  count(file_date)
+
+write_csv(day_crim, "criminal_po_daily.csv")
+```
+
+Result: Significant dip around Hurricane Harvey in 2017, only 2 criminal POs filed on August 27, 5 on August 28, 6 on August 29 - the lowest numbers recorded since 2017. There was a dip in Feb 2021 too, but less big, dropping to 21 POs on Feb 15.
+
+```{r}
+
+## what was the outcome?
+
+code_crim <- time_crim %>% 
+  mutate(file_date = floor_date(file_date, "day")) %>% 
+  filter(grepl('2017|2018|2019|2020|2021|2022',file_date)) %>% 
+  group_by(file_date) %>% 
+  count(code_desc)
+
+## outcome overall
+
+all_code_crim <- time_crim %>% 
+  count(code_desc)
+  
+## outcome per day
+
+short_code_crim <- code_crim %>% 
+  pivot_wider(names_from = code_desc, values_from = n)
+
+write_csv(short_code_crim, "pos_daily_outcomes.csv")
+
+## filter for 2017, hurricane harvey, no of cases
+
+day_crim_2017 <- time_crim %>% 
+  mutate(file_date = floor_date(file_date, "day")) %>% 
+  filter(grepl('2017',file_date)) %>% 
+  count(file_date)
+
+write_csv(day_crim_2017, "criminal_po_2017.csv")
+
+```
+
+For context: Most relevant category is emergency protection order granted with over 69k cases, followed by protective order stay granted (2.7k). Emergency protective orders rarely get denied (36).
+
+```{r}
+## criminal t-test: uri
+
+feb_2021_crim <- day_crim %>% 
+  filter(grepl('^2021-02', file_date))
+
+other_febs_crim <- day_crim %>% 
+  filter(grepl('^2022-02|^2020-02|^2019-02|^2018-02|^2017-02', file_date))
+
+mean_feb_2021 <- mean(feb_2021_crim$n)
+sd_feb_2021 <- sd(feb_2021_crim$n)
+
+mean_other_febs <- mean(other_febs_crim$n)
+sd_other_febs <- sd(other_febs_crim$n)
+
+t_test_uri <- t.test(feb_2021_crim$n, other_febs_crim$n)
+
+print(t_test_uri)
+
+## criminal t-test: harvey
+
+as_2017_crim <- day_crim %>% 
+  filter(grepl('^2017-08|^2017-09', file_date))
+
+other_as_crim <- day_crim %>% 
+  filter(grepl('^2018-08|^2018-09|^2019-08|^2019-09|^2020-08|^2020-09|^2021-08|^2021-09|^2022-08|^2022-09', file_date))
+
+mean_as_2017 <- mean(as_2017_crim$n)
+sd_as_2017 <- sd(as_2017_crim$n)
+
+mean_other_as <- mean(other_as_crim$n)
+sd_other_as <- sd(other_as_crim$n)
+
+t_test_harvey <- t.test(as_2017_crim$n, other_as_crim$n)
+
+print(t_test_harvey)
+
+## criminal t-test: harvey, just august
+
+a_2017_crim <- day_crim %>% 
+  filter(grepl('^2017-08', file_date))
+
+other_a_crim <- day_crim %>% 
+  filter(grepl('^2018-08|^2019-08|^2020-08|^2021-08|^2022-08', file_date))
+
+mean_a_2017 <- mean(a_2017_crim$n)
+sd_a_2017 <- sd(a_2017_crim$n)
+
+mean_other_a <- mean(other_a_crim$n)
+sd_other_a <- sd(other_a_crim$n)
+
+t_test_harvey_2 <- t.test(a_2017_crim$n, other_a_crim$n)
+
+print(t_test_harvey_2)
+
+```
+
+T-testes showed strong significance.
+
+```{r}
+## criminal defendants around uri
+
+crim_defend_uri <- time_crim %>% 
+  filter(file_date >= "2021-02-13" & file_date <= "2021-02-24")
+
+write.xlsx(crim_defend_uri, "defendants_criminal_pos_uri.xlsx")
+
+```
+
+## Analysis of civil protective orders
+
+```{r}
+
+## civil data: what defendants show up multiple times?
+
+def_civil <- civil_po %>%
+  filter(party_role %in% c("Defendant  - Civil", "	Respondent - CIVIL")) %>% 
+  count(party_name) %>% 
+  arrange(desc(n))
+```
+ 
+Out of 8,938 defendants, 699 show up more than once. Rene Gamez has had 6 protective orders filed against him, only of of those was granted. At least 3 were dismissed on plaintiff's motion.
+
+```{r}
+## civil data: which plaintiffs have sought help during/after natural disaster?
+
+plaint_uri <- civil_po %>% 
+  mutate(file_date = as.Date(file_dt, format = "%Y-%m-%d")) %>% 
+  mutate(disposition_date = as.Date(disposition_dt, format = "%Y%m%d")) %>% 
+  filter(file_date >= "2021-02-13" & file_date <= "2021-03-13") %>% 
+  select(-file_dt, -disposition_dt) %>% 
+  mutate(duration = as.numeric(difftime(disposition_date, file_date, units = "days")))
+  
+
+write_csv(plaint_uri, "civil_cases_uri.csv")
+write.xlsx(plaint_uri, "civil_cases_uri_big.xlsx")
+```
+
+
+```{r}
+## civil: how did # change before, during, after disasters? 
+
+civil_cases <- civil_po %>% 
+  mutate(file_date = as.Date(file_dt, format = "%Y-%m-%d")) %>%
+  mutate(disposition_date = as.Date(disposition_dt, format = "%Y%m%d")) %>% 
+  select(!c(disposition_dt, file_dt)) %>%
+  mutate(file_date = floor_date(file_date, "day")) %>%
+  group_by(file_date) %>%
+  summarise(distinct_cases = n_distinct(case_nbr))
+```
+
+
+```{r}
+## Finding out on which days no protective orders were filed other than weekends
+
+complete_dates <- data.frame(Date = seq(as.Date("2017-01-01"), as.Date("2022-12-31"), by = "day")) %>% clean_names()
+civil_cases <- complete(civil_cases, file_date = complete_dates$date)
+    
+civil_cases <- civil_cases %>% 
+  mutate(distinct_cases = replace_na(distinct_cases, 0)) %>% 
+  mutate(rolling_avg = rollmean(distinct_cases, k=7, fill=NA, align='right'))
+
+no_pos <- civil_cases %>% 
+  filter(distinct_cases == 0) %>% 
+  mutate(weekday= weekdays(file_date)) %>% 
+  filter(weekday %in% c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")) %>% 
+  select(-rolling_avg)
+
+write_csv(no_pos, "weekdays_without_civil_pos.csv")
+```
+
+On 769 days, there were no civil POs filed at all. Most of those days were the weekend. To file a protective order, you need to come during interviewing hours (mo - fr, 8am - 3pm). 144 days without POs were weekdays. For the duration of Uri (Feb 13 - 17), there was not a single civil PO filed.
+
+```{r}
+## Sum of all distinct civil protective order cases
+
+sum_civil <- sum(civil_cases$distinct_cases)
+numeric_result <- as.numeric(sum_civil)
+
+write_csv(civil_cases, "civil_cases.csv")
+
+## Civil cases filed per month
+
+civil_cases_month <- civil_po %>% 
+  mutate(file_date = as.Date(file_dt, format = "%Y-%m-%d")) %>%
+  mutate(disposition_date = as.Date(disposition_dt, format = "%Y%m%d")) %>% 
+  select(!c(disposition_dt, file_dt)) %>%
+  mutate(file_date = floor_date(file_date, "month")) %>%
+  group_by(file_date) %>% 
+  summarise(distinct_cases = n_distinct(case_nbr))
+```
+
+Between 2017 and 2022, there were 9,365 cases of protective civil orders. Compared to over 80k criminal cases, it is clear, that civil protective orders are much less used as an instrument.
+
+```{r}
+## civil: disposition distribution?
+
+dispo_civil <- civil_po %>%
+  filter(party_role %in% c("Defendant  - Civil", "	Respondent - CIVIL")) %>% 
+  count(disposition) %>% 
+  mutate(perc = round(n/sum(n)*100)) %>% 
+  arrange(desc(n))
+
+```
+PO signed, final: 54%
+dismissed on plaintiff's motion: 28%
+dismissed for want of prosecution: 6%
+
+```{r}
+## calculating how long it takes from a po filed to disposition
+
+civil_cases_duration <- civil_po %>% 
+  mutate(file_date = as.Date(file_dt, format = "%Y-%m-%d")) %>%
+  mutate(disposition_date = as.Date(disposition_dt, format = "%Y%m%d")) %>% 
+  select(!c(disposition_dt, file_dt)) %>%
+  mutate(duration = as.numeric(difftime(disposition_date, file_date, units = "days")))
+
+mean_duration <- mean(civil_cases_duration$duration, na.rm = TRUE)
+
+civil_duration_sepaug <- civil_cases_duration %>% 
+  filter(grepl("^2017-08|^2017-09", file_date))
+
+mean_duration_sepaug <- mean(civil_duration_sepaug$duration, na.rm = TRUE)
+
+civil_duration_uri <- civil_cases_duration %>% 
+  filter(grepl("^2021-02", file_date))
+
+mean_duration_uri <- mean(civil_duration_uri$duration, na.rm = TRUE)
+
+```
+
+The average duration from filing to disposition is 108 days. In August, September of 2017 it was 110 and in February 2021 112 days.
+

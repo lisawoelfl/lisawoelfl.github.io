@@ -1,0 +1,58 @@
+---
+title: "houston pd"
+output: html_notebook
+---
+
+## Introduction 
+
+In this notebook, I'm examining call data from the Houston victim service organization BRIDGE OVER TROUBLES WATERS.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+``` 
+
+## Load libraries
+
+Loading required libraries for this analysis.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(xlsx)
+```
+
+
+
+```{r}
+## read and combine all files
+
+1 <- read_csv("data/911_Calls_for_Service_2020.csv") %>% clean_names
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
