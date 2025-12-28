@@ -33,9 +33,12 @@ font-size: 3.5em;
 
 .underline,
 a[href^="https"] {
-  text-decoration: 3px underline #e0510e !important; 
+  text-decoration: underline !important;
+  text-decoration-color: #e0510e;
+  text-decoration-thickness: 3px;
   color: #f5f1f0;
 }
+
 
 
 .link {
