@@ -1,0 +1,169 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+In this notebook, I'm examining data from the Maryland Department of Public Safety and Correctional Services. I have following questions:
+* How many releases during Covid? Who was released? (age, sex, race)
+* How did the composition of the prison population change over 5 years?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+``` 
+
+## Load libraries
+
+Loading required libraries for this analysis.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(openxlsx)
+library(forecast)
+library(ggplot2)
+library(zoo)
+library(readxl)
+```
+The following data I received from the Maryland Department of Public Safety and Correctional Services (DPSCS) on March 7, 2024. I entered the totals I needed into a new spreadsheet. The agency reports inmate characteristics quarterly: age, sex, race. The data covers 2018 to 2023.
+
+About the data: Race and ethnicity are self-identified. Sex is defined by genitals, which is why there are only two categories.
+
+```{r}
+race <- "data/md_prison_race.xlsx" %>%
+  read_excel(sheet = 1) %>% clean_names()
+
+race %>% 
+  mutate(black_percent = as.numeric(black_percent)) %>% 
+  mutate(white_percent = as.numeric(white_percent)) %>%
+  mutate(latinx_percent = as.numeric(latinx_percent)) %>%
+  mutate(asian_percent = as.numeric(asian_percent)) %>%
+  mutate(unknown_percent = as.numeric(unknown_percent))
+
+```
+
+My other datasets pertain to releases and intakes. For this data, monthly counts of demographics are available. The data has different columns regarding race and ethnicity. I'm using ethnicity and, further, dividing the population into "Black" and "Non-Black", because I'm specifically interested in the impact of Black incarcerated people.
+
+Ethnicity and race are self-reported. For sex, the prison records genitals, resulting in binary categories.
+
+```{r}
+## import xlsx file for intakes sheet
+
+intakes <- "data/intakes_releases.xlsx" %>% 
+  read_excel(sheet = 1) %>% clean_names()
+
+## import xlsx file for releases sheet
+
+releases <- "data/intakes_releases.xlsx" %>% 
+  read_excel(sheet = 2) %>% clean_names()
+
+## merge and clean
+
+joined <- merge(releases, intakes, all = TRUE) %>% 
+  mutate(race = case_when(
+    is.na(race) ~ "Unknown",
+    TRUE ~ as.character(race)  # Keep other values unchanged
+  )) %>% 
+  rename(month = yyyy_mm) %>% 
+  mutate(race_category = if_else(
+    race == "Black", "Black", "Non-Black")) %>% # want to see the differences between black and others
+  mutate(gender = case_when(
+    gender == "Z" ~ "Unknown",
+    gender == "Unknown Gender" ~ "Unknown",
+    TRUE ~ as.character(gender)
+  ))
+
+## time series for intakes according to race
+
+intakes_race <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-releases) %>% 
+  group_by(month, race_category) %>%
+  summarize(total_intakes = sum(intakes, na.rm = TRUE)) %>% 
+  mutate(total_daily_intakes = sum(total_intakes),
+         percentage = (total_intakes / total_daily_intakes) * 100)
+
+## time series for intakes according to sex
+
+intakes_sex <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-releases) %>% 
+  group_by(month, gender) %>%
+  summarize(total_intakes = sum(intakes, na.rm = TRUE))
+
+## time series for releases according to race
+
+releases_race <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-intakes) %>% 
+  group_by(month, race_category) %>%
+  summarize(total_releases = sum(releases, na.rm = TRUE)) %>% 
+  mutate(total_daily_releases = sum(total_releases),
+         percentage = (total_releases / total_daily_releases) * 100)
+
+## time series for releases according to sex
+
+releases_sex <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-intakes) %>% 
+  group_by(month, gender) %>%
+  summarize(total_releases = sum(releases, na.rm = TRUE)) %>% 
+  filter(month <= as.Date("2021-12-01"))
+
+female_race <- joined %>% 
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  filter(gender == "Female") %>% 
+  select(-intakes) %>%
+  group_by(month, race_category) %>%
+  summarize(total_releases = sum(releases, na.rm = TRUE))
+  
+  
+
+## filter intakes for just two years, so it fits with releases data
+
+filtered_intakes_race <- intakes_race %>% 
+  filter(month <= as.Date("2021-12-01"))
+
+## join in filtered dataset
+
+joined_small <- merge(releases_race, filtered_intakes_race, all = TRUE) %>% 
+  mutate(difference = total_intakes - total_releases)
+
+## visualize
+
+ggplot(data = joined_small, aes(x = month, y = difference, fill = race_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Month", y = "Difference", fill = "Race Category") +
+  theme_minimal()
+
+ggplot(data = releases_race, aes(x = month, y = total_releases, fill = race_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "month", y = "releases", fill = "race") +
+  theme_minimal()
+
+ggplot(data = intakes_race, aes(x = month, y = total_intakes, fill = race_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "month", y = "intakes", fill = "race") +
+  theme_minimal()
+
+ggplot(data = intakes_race, aes(x = month, y = percentage, fill = race_category)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  labs(x = "month", y = "% intakes", fill = "race") +
+  geom_hline(yintercept = 70, linetype = "dashed", color = "red") +  # Adding horizontal line
+  theme_minimal()
+
+ggplot(data = releases_race, aes(x = month, y = percentage, fill = race_category)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  labs(x = "month", y = "% releases", fill = "race") +
+  geom_hline(yintercept = 70, linetype = "dashed", color = "red") +  # Adding horizontal line
+  theme_minimal()
+
+
+```
+

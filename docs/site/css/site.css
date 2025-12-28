@@ -18,24 +18,27 @@ main {
 	font-size: 1.1em;
 }
 
-b {
+.b {
 	font-weight: 500;
 }
 
 h1,h2 {
 	font-family: 'PT Serif';
+	padding: 0 0 1em 0;
 }
 
 h1 {font-weight: 600;
 font-size: 3.5em;
 }
 
-.underline {
-	text-decoration: 3px underline #e0510e;
+.underline,
+a[href^="https"] {
+  text-decoration: 3px underline #e0510e; color: #f5f1f0;
 }
 
+
 .link {
-	text-decoration: none;
+	text-decoration: 3px underline #e0510e;
 	color: #f5f1f0;
 }
 
@@ -51,4 +54,10 @@ section {
 	background-color: #f5f1f0;
 	color: #e0510e;
 	margin: 1em 0;
+}
+
+.quote {
+	font-size: 1.1em;
+	font-style: italic;
+text-decoration: 1px underline #e0510e;
 }

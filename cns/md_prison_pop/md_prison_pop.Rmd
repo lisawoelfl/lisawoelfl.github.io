@@ -1,0 +1,229 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+In this notebook, I'm examining data from the Maryland Department of Public Safety and Correctional Services. I have following questions:
+* How many releases during Covid? Who was released? (age, sex, race)
+* How did the composition of the prison population change over 5 years?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+``` 
+
+## Load libraries
+
+Loading required libraries for this analysis.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(openxlsx)
+library(forecast)
+library(ggplot2)
+library(zoo)
+library(readxl)
+```
+The following data I received from the Maryland Department of Public Safety and Correctional Services (DPSCS) on March 7, 2024. I entered the totals I needed into a new spreadsheet. The agency reports inmate characteristics quarterly: age, sex, race. The data covers 2018 to 2023.
+
+About the data: Race and ethnicity are self-identified. Sex is defined by genitals, which is why there are only two categories.
+
+```{r}
+race <- "data/md_prison_race.xlsx" %>%
+  read_excel(sheet = 1) %>% clean_names()
+
+race %>% 
+  mutate(black_percent = as.numeric(black_percent)) %>% 
+  mutate(white_percent = as.numeric(white_percent)) %>%
+  mutate(latinx_percent = as.numeric(latinx_percent)) %>%
+  mutate(asian_percent = as.numeric(asian_percent)) %>%
+  mutate(unknown_percent = as.numeric(unknown_percent))
+
+```
+
+My other datasets pertain to releases and intakes. For this data, monthly counts of demographics are available. The data has different columns regarding race and ethnicity. I'm using ethnicity and, further, dividing the population into "Black" and "Non-Black", because I'm specifically interested in the impact of Black incarcerated people.
+
+Ethnicity and race are self-reported. For sex, the prison records genitals, resulting in binary categories. To make it easier, I decided to summarize not-Black and Unknown in one category. Unknown race makes up for a small share of the population.
+
+```{r}
+## import xlsx file for intakes sheet
+
+intakes <- "data/intakes_releases.xlsx" %>% 
+  read_excel(sheet = 1) %>% clean_names() %>% 
+  rename(race = race_ethnicity)
+
+## import xlsx file for releases sheet
+
+releases <- "data/intakes_releases.xlsx" %>% 
+  read_excel(sheet = 2) %>% clean_names()
+
+## merge and clean
+
+joined <- merge(releases, intakes, all = TRUE) %>% 
+  mutate(race = case_when(
+    is.na(race) ~ "Unknown",
+    TRUE ~ as.character(race)  # Keep other values unchanged
+  )) %>% 
+  rename(month = yyyy_mm) %>% 
+  mutate(race_category = if_else(
+    race == "Black", "Black", "Non-Black or Unknown")) %>% # want to see the differences between Black and others
+  mutate(gender = case_when(
+    gender == "Z" ~ "Unknown",
+    gender == "Unknown Gender" ~ "Unknown",
+    TRUE ~ as.character(gender)
+  ))
+
+## time series for intakes according to race
+
+intakes_race <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-releases) %>% 
+  group_by(month, race_category) %>%
+  summarize(total_intakes = sum(intakes, na.rm = TRUE)) %>% 
+  mutate(total_daily_intakes = sum(total_intakes),
+         percentage = (total_intakes / total_daily_intakes) * 100)
+
+## calculate total share of intakes according to race category
+
+share_race_intakes <- intakes_race %>% 
+  group_by(race_category) %>% 
+  summarize(total_intakes_race =sum(total_intakes)) %>% 
+  mutate(share = total_intakes_race/sum(total_intakes_race)*100)
+
+## calculate total share of intakes according to race only during state of emergency
+
+share_race_intakes_covid <- intakes_race %>% 
+  filter(month >= as.Date("2020-04-01") & month <= as.Date("2021-07-31")) %>% 
+  group_by(race_category) %>% 
+  summarize(total_intakes_race =sum(total_intakes)) %>% 
+  mutate(share = total_intakes_race/sum(total_intakes_race)*100)
+
+## calculate total share of intakes according to race for all other months
+
+share_race_intakes_other <- intakes_race %>% 
+  filter(!(month >= as.Date("2020-04-01") & month <= as.Date("2021-07-31"))) %>% 
+  group_by(race_category) %>% 
+  summarize(total_intakes_race =sum(total_intakes)) %>% 
+  mutate(share = total_intakes_race/sum(total_intakes_race)*100)
+
+```
+Findings: 70.7% of intakes between January 2020 and December 2023 were Black. During the state of emergency, the share was lower, Black people accounted for 66.6% of intakes. For the months before and after Black people accounted for 71.5% of intakes.
+```{r}
+## time series for intakes according to sex
+
+intakes_sex <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-releases) %>% 
+  group_by(month, gender) %>%
+  summarize(total_intakes = sum(intakes, na.rm = TRUE))
+
+## time series for releases according to race
+
+releases_race <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+    filter(month <= as.Date("2021-12-01")) %>% 
+  select(-intakes) %>% 
+  group_by(month, race_category) %>%
+  summarize(total_releases = sum(releases, na.rm = TRUE)) %>% 
+  mutate(total_monthly_releases = sum(total_releases),
+         percentage = (total_releases / total_monthly_releases) * 100)
+
+## calculate total share of releases according to race category
+
+share_race_releases <- releases_race %>% 
+  group_by(race_category) %>% 
+  summarize(total_releases_race =sum(total_releases)) %>% 
+  mutate(share = total_releases_race/sum(total_releases_race)*100)
+
+## calculate total share of releases according to race only during state of emergency
+
+share_race_releases_covid <- releases_race %>% 
+  filter(month >= as.Date("2020-04-01") & month <= as.Date("2021-07-31")) %>% 
+  group_by(race_category) %>% 
+  summarize(total_releases_race =sum(total_releases)) %>% 
+  mutate(share = total_releases_race/sum(total_releases_race)*100)
+
+## calculate total share of releases according to race for all other months
+
+share_race_releases_other <- releases_race %>% 
+  filter(!(month >= as.Date("2020-04-01") & month <= as.Date("2021-07-31"))) %>% 
+  group_by(race_category) %>% 
+  summarize(total_releases_race =sum(total_releases)) %>% 
+  mutate(share = total_releases_race/sum(total_releases_race)*100)
+```
+During the state of emergency, Black people accounted for 67.8% of releases. In the other months, it was 68.5%. Overall, in 2020 and 2021, Black people accounted for 68% of releases.
+
+```{r}
+## time series for releases according to sex
+
+releases_sex <- joined %>%
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  select(-intakes) %>% 
+  group_by(month, gender) %>%
+  summarize(total_releases = sum(releases, na.rm = TRUE))
+
+female_race <- joined %>% 
+  mutate(month = ymd(month, truncated = 1L)) %>%
+  filter(gender == "Female") %>% 
+  select(-intakes) %>%
+  group_by(month, race_category) %>%
+  summarize(total_releases = sum(releases, na.rm = TRUE))
+
+
+## join in filtered dataset
+
+merge_releases <- releases_race %>% 
+  select(-percentage)
+
+merge_intakes <- intakes_race %>% 
+  select(-percentage)
+
+joined_small <- merge(merge_intakes, merge_releases, all = TRUE) %>% 
+  mutate(difference = total_intakes - total_releases) %>% 
+  filter(month <= as.Date("2021-12-01"))
+
+## visualize
+
+ggplot(data = joined_small, aes(x = month, y = difference, fill = race_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Month", y = "Difference", fill = "Race Category") +
+  theme_minimal()
+
+ggplot(data = releases_race, aes(x = month, y = total_releases, fill = race_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "month", y = "releases", fill = "race") +
+  theme_minimal()
+
+ggplot(data = intakes_race, aes(x = month, y = total_intakes, fill = race_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "month", y = "intakes", fill = "race") +
+  theme_minimal()
+
+ggplot(data = intakes_race, aes(x = month, y = percentage, fill = race_category)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  labs(x = "month", y = "% intakes", fill = "race") +
+  geom_hline(yintercept = 70, linetype = "dashed", color = "red") +  # Adding horizontal line
+  theme_minimal()
+
+ggplot(data = releases_race, aes(x = month, y = percentage, fill = race_category)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  labs(x = "month", y = "% releases", fill = "race") +
+  geom_hline(yintercept = 70, linetype = "dashed", color = "red") +  # Adding horizontal line
+  theme_minimal()
+
+
+```
+```{r}
+## write csvs
+
+write.xlsx(releases_race, "data/releases_race.xlsx")
+write.xlsx(intakes_race, "data/intakes_race.xlsx")
+```
+
