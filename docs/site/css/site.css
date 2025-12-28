@@ -42,7 +42,7 @@ a[href^="https"] {
 
 
 .link {
-	text-decoration: 3px underline #e0510e;
+	text-decoration: 3px underline #e0510e !important;
 	color: #f5f1f0;
 }
 
