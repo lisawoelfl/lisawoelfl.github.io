@@ -40,9 +40,8 @@ a[href^="https"] {
 }
 
 
-
 .link {
-	text-decoration: 3px underline #e0510e !important;
+	text-decoration: 3px underline #e0510e;
 	color: #f5f1f0;
 }
 
@@ -63,5 +62,8 @@ section {
 .quote {
 	font-size: 1.1em;
 	font-style: italic;
-text-decoration: 1px underline #e0510e !important;
+	text-decoration: underline !important;
+  text-decoration-color: #e0510e;
+  text-decoration-thickness: 1px;
+  color: #f5f1f0;
 }
