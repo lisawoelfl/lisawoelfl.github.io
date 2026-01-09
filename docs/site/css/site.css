@@ -34,11 +34,10 @@ font-size: 3.5em;
 .underline,
 a[href^="https"] {
   text-decoration: underline !important;
-  text-decoration-color: #e0510e;
-  text-decoration-thickness: 3px;
+  text-decoration-color: #e0510e !important;
+  text-decoration-thickness: 3px !important;
   color: #f5f1f0;
 }
-
 
 .link {
 	text-decoration: 3px underline #e0510e;
@@ -63,7 +62,7 @@ section {
 	font-size: 1.1em;
 	font-style: italic;
 	text-decoration: underline !important;
-  text-decoration-color: #e0510e;
-  text-decoration-thickness: 1px;
+  text-decoration-color: #e0510e !important;
+  text-decoration-thickness: 1px !important;
   color: #f5f1f0;
 }
